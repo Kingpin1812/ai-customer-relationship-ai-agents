@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "3d-web-experience": {
+      "source": "sickn33/agentic-awesome-skills",
+      "sourceType": "github",
+      "skillPath": "skills/3d-web-experience/SKILL.md",
+      "computedHash": "9ce624c615599a2b1b8c513565e772d4555682b82a739bae928e76cc1ab4d5f0"
+    }
+  }
+}

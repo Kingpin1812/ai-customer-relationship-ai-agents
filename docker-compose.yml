@@ -1,0 +1,193 @@
+# Local stack: PostgreSQL, Redis, MinIO, API, Celery worker and beat, web UI, Prometheus, Grafana.
+# Setup is in run.md. Copy .env.example to .env first; the required values are checked below.
+# Every published port is bound to 127.0.0.1 because dev sign-in and /metrics have no password.
+
+x-backend-env: &backend-env
+  ENVIRONMENT: development
+  AUTH_MODE: dev
+  JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
+  DATABASE_URL: postgresql+psycopg://workflow:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@postgres:5432/workflow
+  TASK_EXECUTOR: celery
+  REDIS_URL: redis://redis:6379/0
+  STORAGE_BACKEND: s3
+  S3_ENDPOINT_URL: http://minio:9000
+  S3_BUCKET: workflow-artifacts
+  S3_ACCESS_KEY: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+  S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+  PLANNER_MODE: ${PLANNER_MODE:-rules}
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+  OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:latest}
+  ENABLE_FAULT_INJECTION: ${ENABLE_FAULT_INJECTION:-true}
+  ALLOW_SELF_APPROVAL: ${ALLOW_SELF_APPROVAL:-true}
+  CORS_ORIGINS: http://localhost:3000
+  OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+
+x-backend: &backend
+  build: ./backend
+  image: enterprise-ai-workflow-backend:local
+  # Optional settings from .env.example. The environment block below takes precedence.
+  env_file:
+    - .env
+  environment: *backend-env
+  extra_hosts:
+    - host.docker.internal:host-gateway
+  restart: unless-stopped
+
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_USER: workflow
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: workflow
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U workflow -d workflow]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4-alpine
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  minio:
+    image: ${MINIO_IMAGE:-quay.io/minio/minio:RELEASE.2024-12-18T13-15-44Z}
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Set MINIO_ROOT_USER in .env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+    ports:
+      - 127.0.0.1:9001:9001
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: [CMD, mc, ready, local]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # Runs once, then exits: schema, demo data, file bucket, workflow checkpoint tables.
+  migrate:
+    <<: *backend
+    command: [sh, -c, "alembic upgrade head && python -m app.seed && python -m app.bootstrap"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      minio: { condition: service_healthy }
+    restart: "no"
+
+  api:
+    <<: *backend
+    ports:
+      - 127.0.0.1:8000:8000
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=4)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  # One process with a thread pool, so all workers share the metrics registry Prometheus scrapes.
+  worker:
+    <<: *backend
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app:celery_app
+      - worker
+      - --pool=threads
+      - --concurrency=4
+      - --loglevel=INFO
+    environment:
+      <<: *backend-env
+      WORKER_METRICS_PORT: "9101"
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: [CMD-SHELL, celery -A app.workers.celery_app:celery_app inspect ping --destination celery@$$HOSTNAME]
+      interval: 30s
+      timeout: 15s
+      retries: 3
+
+  # Expires old approvals and restarts stuck runs on a schedule.
+  beat:
+    <<: *backend
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app:celery_app
+      - beat
+      - --loglevel=INFO
+      - --schedule=/tmp/celerybeat-schedule
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+
+  frontend:
+    build: ./frontend
+    image: enterprise-ai-workflow-frontend:local
+    environment:
+      BACKEND_URL: http://api:8000
+    ports:
+      - 127.0.0.1:3000:3000
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/login').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./infra/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports:
+      - 127.0.0.1:9090:9090
+    depends_on:
+      - api
+      - worker
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - 127.0.0.1:3001:3000
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:

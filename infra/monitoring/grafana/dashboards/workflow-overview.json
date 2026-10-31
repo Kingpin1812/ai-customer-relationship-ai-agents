@@ -1,0 +1,155 @@
+{
+  "uid": "workflow-overview",
+  "title": "Workflow overview",
+  "tags": ["workflow"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Throughput (workflows per minute)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "wpm" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(workflows_created_total[5m])) * 60",
+          "legendFormat": "submitted"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (status) (rate(workflows_finished_total[5m])) * 60",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Failure rate (failed share of finished workflows)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(workflows_finished_total{status=\"failed\"}[1h])) / sum(increase(workflows_finished_total[1h]))"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Approval wait (95th percentile)",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(approval_wait_seconds_bucket[1h])))"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Workflow duration (95th percentile)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(workflow_duration_seconds_bucket[15m])))",
+          "legendFormat": "workflow"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Graph step duration (95th percentile)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, step) (rate(workflow_step_duration_seconds_bucket[15m])))",
+          "legendFormat": "{{step}}"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Provider call latency (95th percentile)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by (le, provider, operation) (rate(integration_tool_latency_seconds_bucket[15m])))",
+          "legendFormat": "{{provider}} {{operation}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Provider failures, by category",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (category) (increase(integration_tool_failures_total[15m]))",
+          "legendFormat": "{{category}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Retries and reconciliations",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "short" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (operation) (increase(integration_retries_total[15m]))",
+          "legendFormat": "retry {{operation}}"
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (happened) (increase(integration_reconciliations_total[15m]))",
+          "legendFormat": "reconciled, happened={{happened}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "HTTP requests, by status",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (status) (rate(http_requests_total[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    }
+  ]
+}

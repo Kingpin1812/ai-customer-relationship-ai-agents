@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+test-results/
+playwright-report/
+tests/
+playwright.config.ts
+next-env.d.ts
+*.tsbuildinfo
+*.log
+.env
+.env.*

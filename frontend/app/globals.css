@@ -1,0 +1,109 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f5f3ee;
+  --surface: #fffefb;
+  --surface-muted: #ece9e1;
+  --foreground: #16202a;
+  --muted: #5a6470;
+  --border: #d9d5ca;
+  --primary: #0f5f5a;
+  --primary-foreground: #ffffff;
+  --gate: #92400e;
+  --gate-soft: #fdf0dc;
+  --success: #166534;
+  --success-soft: #e3f4e8;
+  --danger: #a51c1c;
+  --danger-soft: #fbe6e4;
+  --info: #1d4f91;
+  --info-soft: #e4edf9;
+  --neutral-soft: #e7e5de;
+  --stage: #0d1620;
+  --stage-text: #dfe7ee;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #10161d;
+    --surface: #18212b;
+    --surface-muted: #212c38;
+    --foreground: #e8edf2;
+    --muted: #9aa7b4;
+    --border: #2f3c49;
+    --primary: #4cc2b6;
+    --primary-foreground: #06201e;
+    --gate: #f5b35c;
+    --gate-soft: #3a2a12;
+    --success: #6fd38f;
+    --success-soft: #16301f;
+    --danger: #f28b82;
+    --danger-soft: #3c1b1a;
+    --info: #8db9f2;
+    --info-soft: #182b45;
+    --neutral-soft: #2a3540;
+    --stage: #0a1118;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-muted: var(--surface-muted);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-gate: var(--gate);
+  --color-gate-soft: var(--gate-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-neutral-soft: var(--neutral-soft);
+  --color-stage: var(--stage);
+  --color-stage-text: var(--stage-text);
+  --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Code", Consolas, ui-monospace, monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+.scene-label {
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  text-align: center;
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--stage-text);
+}
+
+.scene-label strong {
+  display: block;
+  font-weight: 600;
+  font-size: 12px;
+}
